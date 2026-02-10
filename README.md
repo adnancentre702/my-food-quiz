@@ -1,43 +1,99 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Foodie Quiz</title>
+    <title>Foodie Quiz Live</title>
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-orange-50 min-h-screen flex items-center justify-center p-6">
+<body class="bg-orange-50 min-h-screen flex items-center justify-center p-4">
 
-    <div id="main-card" class="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full text-center">
+    <div id="app" class="bg-white shadow-2xl rounded-3xl p-8 max-w-lg w-full text-center">
         <div id="game-ui">
-            <span class="text-6xl">👨‍🍳</span>
-            <h1 class="text-3xl font-bold text-slate-800 mt-4 mb-2">Foodie Quiz</h1>
-            <p class="text-slate-500 mb-8">Loading Python Engine...</p>
-            <div id="load-box" class="animate-pulse text-orange-500 font-bold">Please wait...</div>
+            <h1 class="text-4xl mb-4">🌍</h1>
+            <h1 class="text-2xl font-bold text-slate-800">Foodie Quiz Live</h1>
+            <p class="text-slate-500 my-6">Connecting to Global Question Bank...</p>
+            <div id="loader" class="text-orange-500 font-bold">Loading Engine...</div>
         </div>
     </div>
 
     <script type="py">
-from pyscript import document
+from pyscript import document, window
+import json
+import pyodide_http
+import random
 
-def start_game(event):
-    ui = document.querySelector("#game-ui")
-    ui.innerHTML = """
-        <h2 class="text-xl font-bold mb-4">Question 1: Which country invented Caesar Salad?</h2>
-        <button py-click="check_correct" class="w-full bg-orange-500 text-white p-3 rounded-lg mb-2">Mexico</button>
-        <button py-click="check_wrong" class="w-full bg-slate-200 p-3 rounded-lg">Italy</button>
-    """
+# Enable internet requests
+pyodide_http.patch_all()
+import requests
 
-def check_correct(event):
-    document.querySelector("#game-ui").innerHTML = "<h2 class='text-2xl font-bold text-green-500'>Correct! 🎉</h2><p class='mt-4'>You're a master chef!</p>"
+class LiveQuiz:
+    def __init__(self):
+        self.score = 0
+        self.questions = []
+        self.current_pos = 0
 
-def check_wrong(event):
-    document.querySelector("#game-ui").innerHTML = "<h2 class='text-2xl font-bold text-red-500'>Oops! 😅</h2><p class='mt-4'>It was actually invented in Mexico!</p>"
+    async def fetch_questions(self, event=None):
+        document.querySelector("#loader").innerHTML = "Fetching New Questions..."
+        # This API gives 10 random Food & Drink questions
+        url = "https://opentdb.com/api.php?amount=10&category=11&type=multiple"
+        
+        try:
+            response = requests.get(url)
+            data = response.json()
+            self.questions = data['results']
+            self.current_pos = 0
+            self.load_question()
+        except Exception as e:
+            document.querySelector("#game-ui").innerHTML = f"Offline Error: {e}"
 
-# Ready to play
-document.querySelector("#load-box").innerHTML = '<button py-click="start_game" class="bg-orange-600 text-white px-10 py-4 rounded-full text-xl font-bold shadow-lg hover:scale-105 transition-transform">PLAY NOW</button>'
+    def load_question(self, event=None):
+        if self.current_pos >= len(self.questions):
+            self.end_screen()
+            return
+
+        q_data = self.questions[self.current_pos]
+        
+        # Prepare options (Correct + Incorrect)
+        opts = q_data['incorrect_answers'] + [q_data['correct_answer']]
+        random.shuffle(opts)
+
+        options_html = ""
+        for opt in opts:
+            is_correct = "true" if opt == q_data['correct_answer'] else "false"
+            options_html += f'<button py-click="check_answer" data-correct="{is_correct}" class="w-full bg-white border-2 border-slate-100 p-4 rounded-xl mb-3 hover:border-orange-500 hover:bg-orange-50 transition-all text-slate-700 shadow-sm font-medium">{opt}</button>'
+
+        document.querySelector("#game-ui").innerHTML = f"""
+            <div class="flex justify-between mb-4 text-sm font-bold text-orange-500 uppercase">
+                <span>Score: {self.score}</span>
+                <span>Question {self.current_pos + 1}/10</span>
+            </div>
+            <h2 class="text-xl font-bold text-slate-800 mb-8">{q_data['question']}</h2>
+            <div class="grid gap-1">{options_html}</div>
+        """
+
+    def check_answer(self, event):
+        is_correct = event.target.getAttribute("data-correct")
+        if is_correct == "true":
+            self.score += 100
+        
+        self.current_pos += 1
+        self.load_question()
+
+    def end_screen(self):
+        document.querySelector("#game-ui").innerHTML = f"""
+            <h1 class="text-5xl mb-4">✨</h1>
+            <h2 class="text-3xl font-bold">Round Over!</h2>
+            <p class="text-xl my-6 text-slate-600">You earned <span class="text-orange-600 font-black">{self.score}</span> points</p>
+            <button py-click="fetch_questions" class="bg-orange-500 text-white px-10 py-4 rounded-full font-bold shadow-lg">Get New Questions</button>
+        """
+
+quiz = LiveQuiz()
+
+# Initial Start Button
+document.querySelector("#loader").innerHTML = '<button py-click="quiz.fetch_questions" class="bg-orange-600 text-white px-12 py-4 rounded-full text-xl font-bold shadow-xl">START LIVE QUIZ</button>'
     </script>
 </body>
 </html>
